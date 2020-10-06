@@ -1,0 +1,485 @@
+---
+title: "IPEG_analysis"
+author: "Bruce Peng"
+date: "30/03/2020"
+output: html_document
+---
+
+Here includes codes for analysis of IPEG.
+
+**Participants and trial numbers:**
+A total of 30 participants are included in this dataset, each participants completed 40 trials thus the total number of trials is 40x30 = 1200. 34 trials were deleted due to participants' written responses did not conform to the task criteria. Thus, the total number of trials included in the analysis is 1166. 
+
+**Data description:**
+*Participant:* N=30
+*Story_ID:* Story presented to participants on each trial, a total of 40 stories were presented. These stories can be found in IPEG_stimuli.xlsx
+*STFace_ID*: Simulation target ID 
+*ST_gender*: Sex of Simulation target (F=Female, M=Male). Note: no age varaible was recorded for simulation targets as they were all in the young age group.
+*HTFace_ID*: Helping target ID
+*HT_gender*: Helping target sex (Male or female)
+*HT_age*: Helping target age (Old or young)
+*Sex:*: Participants' sex, Male or Female
+*Match*: Age and sex match of simulation and helping targets (1=Sex and age mismatch, 2= Sex mismatch and Age match, 3= Sex match and Age mismatch, 4= Sex and age match)
+*Trial:* Trial order presented to participants.
+*Condition:* Imagine helping (Experimental:Imagine) and identify journalistic technique (Control:Identify)
+*Detail:* "The imagined media website/scene in your mind was?" (collected for estimate and imagine helping conditions). Responses were made on a 1(simple)-7(detailed) Likert scale. 
+*Coherence:* "The imagined media website/scene in your mind was?" (collected for estimate and imagine helping conditions). Responses were made on a 1(vague)-7(coherent and clear) Likert scale. 
+*Perspective:*  "When you identified the media website, imagined helping, or visualized the media website and comments  did you consider  the thoughts and feelings of the person?" (collected for all conditions). Responses are made on a 1(not at all)- 7 (strongly considered). 
+*Help:* DV of interest. "How likely would you be to help in this situation?" (collected for all conditions). Responses are made on a 1(not at all)- 7 (very willing) Likert scale.
+
+Note: Detail, Coherence and Perspective are included so the proctocol mirrored previous studies as closely as possible and are not of particular interest in the current study. 
+
+*Emotional reaction:*
+Emotional reaction (collected for all conditions) rated on a 1(not at all)-7(very strongly) Likert scale for the following emotions:
+-	Soft-hearted
+-	Troubled 
+-	Warm 
+-	Distressed
+-	Sympathetic
+-	Compassionate
+-	Disturbed
+-	Tender
+-	Moved
+-	Worried
+These measures are included to reduce the possibility of participants correctly guaging the experimental goal and are not utilized in the analyses
+
+
+# Package and directory set up
+```{r setup, include=FALSE}
+# Load packages
+if (!require(pacman)) install.packages('pacman')
+pacman::p_load(sjstats,sjPlot,lme4,lmerTest,emmeans,ggeffects,simr,tidyverse,MuMIn,brms, bayestestR) 
+
+# Set working directory
+setwd('C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/IPEG/IPEG/IPEG_analysis/') #to change
+
+# source custom codes
+source("source/LMM_scripts.R")
+source("source/Bayes_scripts.R")
+```
+
+##Data setup
+
+```{r}
+# Loading data
+IPEG.df<- read.csv('IPEG_fulldata_N=30.csv', header=T)
+
+# Remove deleted trials from data frame
+IPEG.df<- IPEG.df[complete.cases(IPEG.df$Condition),]
+
+# Convert Story_ID and Condition vectors into factors and ensure Identify condition is set as the reference group
+IPEG.df$Story_ID<- as.factor(IPEG.df$Story_ID)
+IPEG.df$Conditions<- as.factor(IPEG.df$Conditions)
+levels (IPEG.df$Conditions) <- c('Identify', 'Imagine')
+
+# Data transformations 
+## Generate the five factor variable for Match conditions
+IPEG.df$Match_condition<- IPEG.df$Match +1
+IPEG.df$Match_condition[IPEG.df$Conditions=="Identify"] <- 1
+IPEG.df$Match_condition <- as.factor(IPEG.df$Match_condition)
+levels(IPEG.df$Match_condition) <- c("Identify","S-A-", "S-A+","S+A-", "S+A+")
+
+## Effect code and dummy
+IPEG.df<- IPEG.df%>% 
+              mutate(
+                # Effect code sex of helping targets(Female=1, male=-1)
+                HT_sex_c= ifelse(HT_sex=='F', 1, -1),
+                # Effect code age of helping targets (1=Old, -1=Young)
+                HT_age_c = ifelse(HT_age=='Old', 1, -1),
+                # Create a dummy variable= for the condition variable
+                dummy_img = as.numeric (Conditions=='Imagine'))
+```
+
+
+# Frequentist Linear Mixed Modeling
+
+## Main effect analysis
+### Determine if clustering exist
+```{r}
+ranova(lmer(Help~(1|participant)+(1|Story_ID) +(1|STFace_ID)+(1|HTFace_ID), data=IPEG.df))
+# Only STFace_ID is not significant (a= 0.2) so include HTFace_ID, participant and Story_ID as varying effects
+```
+
+### Overall Generalizability of Prosoical simulation effect
+```{r}
+# Zero-correlation parameter model and determine significance of varying slopes
+step(zcp_model<-lmer(Help~Conditions +HT_sex_c+HT_age_c+(dummy_img||participant)+(dummy_img||Story_ID) +(dummy_img||HTFace_ID), data=IPEG.df))# only retain dummy_img in participant
+# Reduced model
+zcp_model_rm<-lmer(Help~Conditions +HT_sex_c+HT_age_c+(dummy_img||participant)+(1|Story_ID) +(1|HTFace_ID), data=IPEG.df)
+# Include correlation parameters to retained random slopes
+final_model<- lmer(Help~Conditions+HT_sex_c+HT_age_c+(dummy_img|participant)+(1|Story_ID) +(1|HTFace_ID), data=IPEG.df)
+# Correlation parameters significantly improve model fit
+anova(zcp_model_rm,final_model, refit=F)
+# final_model identified as the parsimonious model
+
+# F-test of fixed effect with Kenward-Roger approximation of degress of freedom found significant condition effect
+anova(final_model, test='kenward-roger')
+
+#extract means for each conditions
+(posthoc<- emmeans(final_model, pairwise~Conditions, adjust= 'none'))
+confint(posthoc)
+```
+#### Plots
+```{r}
+# Condition differences in willingness to help
+means<- data.frame(posthoc$emmeans)
+bar_plot(means)
+
+# Plot individual differences in the prosocial simulation effect in absolute scale using 
+final_model2<- update(final_model, .~. -Conditions +dummy_img)
+plot<-coef(final_model2)$participant[4]
+plot(x= seq(1:30),y= plot$dummy_img, xlab='Participants', ylab="Imagine condition random slopes");abline(0,0, col='red');abline(final_model2@beta[4],0, col='blue')
+```
+#### Assumption testing
+```{r}
+# Normality, homogeneity of variance etc
+plot_model(final_model, type='diag')
+# Random effects in the deviation scale
+plot_model(final_model, type='re')
+```
+#### Effect size
+* Reference
+** https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.2041-210x.2012.00261.x
+```{r}
+# R2m = marginal R2 (R2 of fixed effects), R2c= conditional R2 (R2 of fixed + random effects)
+r.squaredGLMM(final_model)
+```
+
+
+## Generalizability of Prosoical simulation effect by age and sex
+### Back Difference coding
+#### Coding Match_Condition variable
+```{r}
+# Set up Back difference coded
+IPEG.df<- IPEG.df%>% 
+              mutate(
+                backdiff_2v1 = ifelse (Match_condition=="Identify",-0.8, 0.2),
+                backdiff_3v2= ifelse(Match_condition=="Identify"|Match_condition=="S-A-", -0.6, 0.4),
+                backdiff_4v3 = ifelse(Match_condition=="S+A-"|Match_condition=="S+A+", 0.6, -0.4),
+                backdiff_5v4 =ifelse (Match_condition=="S+A+",0.8, -0.2))
+```
+
+#### Analysis
+```{r}
+## Zero-correlation parameter model and determine significance of varying slopes
+step(zcp_genmodel<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||participant)  +(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||HTFace_ID)+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||Story_ID), data=IPEG.df, contrast= list (Match_condition= MASS::contr.sdif))) # rertain only backdiff_2v1 and backdiff_5v4 for participant
+# Reduce model
+rm_genmodel<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_5v4||participant)  +(1|HTFace_ID)+(1|Story_ID), data=IPEG.df,contrast= list (Match_condition= MASS::contr.sdif))
+## Model failed to converge, refit the model with better starting values (i.e. end values of previous fits) for REML. Model converged after 3 refits
+rm_genmodel<- refit_LMM(rm_genmodel)
+## Final model
+Gen_model<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_5v4|participant)  +(1|HTFace_ID)+(1|Story_ID), data=IPEG.df,contrast= list (Match_condition= MASS::contr.sdif))
+## Inlcuding correlation parameters did not significantly improve model fit. Thus rm_genmodel is the final model
+anova(rm_genmodel,Gen_model, refit=F)
+
+
+## Test of fixed effects using F-test
+anova(rm_genmodel, test='kenward-roger')
+## Results
+summary(rm_genmodel)
+```
+
+
+
+
+
+### Dummy coding
+#### Coding Match_Condition variable
+```{r}
+# Create dummy coded variables, set reference group as Identify
+IPEG.df<- IPEG.df%>% 
+              mutate(
+                dummy_SAMM = as.numeric(Match_condition=="S-A-"),
+                dummy_SMMAM= as.numeric(Match_condition=="S-A+"),
+                dummy_SMAMM = as.numeric(Match_condition=="S+A-"),
+                dummy_SAM =as.numeric(Match_condition=="S+A+"))
+```
+#### Analysis
+```{r}
+## Zero-correlation parameter model and Determine significance of varying slopes
+zcp_step2<-step(zcp_genmodel2<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||participant)  +(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||HTFace_ID)+(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||Story_ID), data=IPEG.df)) # retain only dummy_SAMM, dummy_SAM and dummy_SMAMM in participant
+# Reduce model
+rm_genmodel2<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(dummy_SAMM+dummy_SAM+dummy_SMAMM||participant)+(1|HTFace_ID)+(1|Story_ID), data=IPEG.df)
+## Model failed to converge, refit the model with better starting values (i.e. end values of previous fits) for REML. Model converged after 1 refit
+rm_genmodel2<- refit_LMM(rm_genmodel2)
+#include correlation
+gen_model2<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(dummy_SAMM+dummy_SAM|participant)+ (0+dummy_SMAMM|participant)+(1|HTFace_ID)+(1|Story_ID), data=IPEG.df) 
+gen_model2<- refit_LMM(gen_model2)#singular fit, remove correlation  parameter for dummy_SMAMM, after this the truncated model still did not converge so refit one time and converged. 
+
+# including correlation parameters do not improve model fit, thus use rm_genmodel2 as the final model
+anova(rm_genmodel2,gen_model2, refit=F)
+
+## Test of fixed effects using F-test
+anova(rm_genmodel2, test='kenward-roger')
+summary(rm_genmodel2)
+
+```
+#### Posthoc
+```{r}
+(posthoc_gen<-emmeans(rm_genmodel2, pairwise~Match_condition, adjust= 'bonferroni'))
+```
+
+#### Plots
+```{r}
+# Condition differences in willingness to help
+gen_means<- data.frame(posthoc_gen$emmeans)
+colnames(gen_means)[1]<- "Conditions"
+bar_plot(gen_means)
+``` 
+
+
+
+# Bayesian Cumulative link mixed model
+## Generalization of the prosocial simulation effect 
+```{r}
+Bayes<- brm(data=IPEG.df, family=cumulative("logit"),
+                      formula= bf(Help~Conditions+HT_sex_c+HT_age_c+(Conditions|participant)+
+                      (Conditions|Story_ID)+(Conditions|HTFace_ID)+(Conditions|STFace_ID)) +
+                   lf(disc~ 0+Conditions, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=20, sample_prior=T,save_all_pars = T, control=list(adapt_delta=0.99))
+
+
+# Diagnostic Checks
+## Posterior prediction check- seems good
+pp_check(Bayes)
+## MCMC plots - all seems to be nicely sampled
+plot(Bayes)
+## Posterior probability for each parameter
+mcmc_plot (Bayes)
+
+# Prior Predictive simulations
+set.seed(67)
+prior_sim(Bayes, c("sd_participant", 'cor_participant', "b"))
+
+# Total number of Sample size and sample sizes for each parameter
+Bayes_help_sample<-bayes_samples(Bayes)
+
+# Results
+summary(Bayes)
+# Plot the predicted probability of each category on the outcome measure for each condition
+conditional_effects(Bayes,categorical=T)
+
+
+# Extract posterior samples 
+set.seed(67)
+posterior<- posterior_samples(Bayes) 
+latent_SD(posterior)
+
+# plot forest plot for the prosocial simulation effect 
+forest.df<-as.data.frame(coef(Bayes)$participant[, ,1])
+forest<- forest_plot(forest.df, c(0.62, 0.23, 1.03))
+forest+ylab("Participants")+
+      xlab ("Beta coefficients")
+
+saveRDS(Bayes, file='Bayes.rda')
+saveRDS(posterior$b_ConditionsImagine, "IPEG_Imagine.rds")
+```
+
+
+### Contrast the prosocial simulation effect across IPE, IPEF and IPEG
+```{r}
+IPE_imagine.df<-readRDS(file="IPE_Imagine.rds")
+IPEF_imagine.df<-readRDS(file="IPEF_Imagine.rds")
+PSE<- cbind.data.frame("IPE"=IPE_imagine.df,"IPEF"=IPEF_imagine.df, "IPEG"=posterior$b_ConditionsImagine)
+PSE.df<- PSE
+PSE<- PSE %>% gather("IPE","IPEF", 'IPEG', key= Condition, value= Posterior)
+
+violin_PSE<- violin_bayes(PSE, rope=c(-0.1, 0.1))[[1]]
+violin_PSE +
+  labs(title="Prosocial simulation effect across experiments",x="Experiment", y = "Beta coefficient") +
+  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  
+violin_bayes(PSE)[[2]]
+
+p_direction(PSE.df)
+rope(PSE.df, ci=1, range=c(-0.1, 0.1))
+
+#---------------------------------------------------------------------------------------------------------------------------
+# plot the contrast between them
+IPEF_IPEG<-PSE$Posterior[PSE$Condition=="IPEF"]-PSE$Posterior[PSE$Condition=="IPEG"]
+IPE_IPEG<-PSE$Posterior[PSE$Condition=="IPE"]-PSE$Posterior[PSE$Condition=="IPEG"]
+PSE_dif<- cbind.data.frame("IPE-IPEG"=IPE_IPEG,"IPEF-IPEG"=IPEF_IPEG)
+PSE_dif.df<-PSE_dif
+PSE_dif<- PSE_dif %>% gather("IPE-IPEG","IPEF-IPEG", key= Condition, value= Posterior)
+
+violin_dif<- violin_bayes(PSE_dif, rope=c(-0.1, 0.1))[[1]]
+violin_dif +
+  labs(title="Contrast of Prosocial simulation effect across experiments",x="Contrast", y = "Beta coefficient") +
+  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  
+violin_bayes(PSE_dif)[[2]]
+```
+
+
+## Grading effect of prosocial simulation effect 
+```{r}
+Bayes_gen<- brm(data=IPEG.df, family=cumulative("logit"),
+                      formula= bf(Help~Match_condition+HT_sex_c+HT_age_c+(Match_condition|participant)+
+                      (Match_condition|Story_ID)+(Match_condition|HTFace_ID)+(Match_condition|STFace_ID)) +
+                   lf(disc~ 0+Match_condition, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=20, sample_prior=T,save_all_pars = T)
+
+# Diagnostic Checks
+## Posterior prediction check- seems good
+pp_check(Bayes_gen)
+## MCMC plots - all seems to be nicely sampled
+plot(Bayes_gen)
+## Posterior probability for each parameter
+mcmc_plot (Bayes_gen)
+
+# Prior Predictive simulations
+set.seed(67)
+prior_sim(Bayes_gen, c("sd_participant", 'cor_participant', "b"))
+
+# Total number of Sample size and sample sizes for each parameter
+Bayes_gen_sample<-bayes_samples(Bayes_gen)
+
+# Results
+summary(Bayes_gen)
+
+library(bayestestR)
+rope(Bayes_gen,ci=1, range =c(-0.10, 0.10))
+plot(p_direction(Bayes_gen,parameters = "b_Match"))
+# Plot the predicted probability of each category on the outcome measure for each condition
+conditional_effects(Bayes_gen,categorical=T)
+# Plot the posterior probability and 95% credible intervals for the two main fixed effects of interest
+bayesplot::mcmc_areas(Bayes_gen,pars = c("b_Match_conditionSMAM","b_Match_conditionSMAP", "b_Match_condition4", "b_Match_condition5"),prob=0.95, prob_outer=1 , point_est="mean")
+
+
+p_direction(Bayes_gen, parameters = "b_Match_condition")
+rope(Bayes_gen,ci=1, range = c(-0.1, 0.1),parameters = "b_Match_condition")
+
+
+match_cond2<-posterior_gen$b_Match_conditionSMAM
+match_cond3<-posterior_gen$b_Match_conditionSMAP
+match_cond4<-posterior_gen$b_Match_conditionSPAM
+match_cond5<-posterior_gen$b_Match_conditionSPAP
+
+
+test<- hypothesis(Bayes_gen, hypothesis =c("Match_conditionSMAM -Match_conditionSMAP=0",
+                                           "Match_conditionSMAM -Match_conditionSPAM=0",
+                                           "Match_conditionSMAM -Match_conditionSPAP=0",
+                                           "Match_conditionSMAP -Match_conditionSPAM=0", 
+                                           "Match_conditionSMAP -Match_conditionSPAP=0",
+                                           "Match_conditionSPAM -Match_conditionSPAP=0" ) , alpha=0.025)
+test;plot(test)
+
+# Extract posterior samples 
+set.seed(67)
+posterior_gen<- posterior_samples(Bayes_gen) 
+latent_SD(posterior_gen)
+```
+
+
+
+### Order restricted model
+* Models to be compared
+** 1) a null model: all conditions (including controls) are ~ equal
+** 2) ordered model1 (theory driven): Identify < S-A- < S+A- = S-A+ < S+A+
+** 3) ordered model2 (data driven):  Identify < SMAM = SMAMM < SMMAM < SAM
+
+```{r}
+# Null model 
+null<- brm(data= IPEG.df, family=cumulative("logit"), 
+                  Help~1+(1|participant)+
+                      (1|Story_ID)+(1|HTFace_ID)+(1|STFace_ID)+(1|STFace_ID),
+                  prior= c(prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd)), 
+                  iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
+
+set.seed (67)
+unrestricted <- bayes_factor(Bayes_gen, null)
+unrestricted$bf
+
+# set ROPE as 0.055
+## Ordered Restricted model 1
+restrictedmodel1<- (posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSMAM"]>0) &
+  (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
+  (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"]>0)
+
+(restrictedmodel1_BF<-restricted_BF(restrictedmodel1, 4e4, 5))
+
+## Order restricted model 2
+restrictedmodel2<-(abs(posterior_gen[, "b_Match_conditionSMAM"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
+  (posterior_gen[, "b_Match_conditionSMAP"]>posterior_gen[, "b_Match_conditionSPAM"]) &
+  (abs(posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSMAP"])<0.1)
+
+(restrictedmodel2_BF<-restricted_BF(restrictedmodel2, 4e4, 5))
+
+restricted2.vsrestricted1<-restricted2.vsunrestricted*(1/restricted1.vsunrestricted)
+restricted2.vsrestricted1
+
+test<-(abs(posterior_gen[, "b_Match_conditionSMAM"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
+  (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
+  (abs(posterior_gen[, "b_Match_conditionSPAM"]-posterior_gen[, "b_Match_conditionSPAP"])<0.1)
+(test_BF<-restricted_BF(test, 4e4, 5))
+
+restrictedmodel2_BF/test_BF
+restrictedmodel1_BF/test_BF
+```
+
+### Violn plots
+```{r}
+match_cond2<-posterior_gen$b_Match_conditionSMAM
+match_cond3<-posterior_gen$b_Match_conditionSMAP
+match_cond4<-posterior_gen$b_Match_conditionSPAM
+match_cond5<-posterior_gen$b_Match_conditionSPAP
+gen_effect<- cbind.data.frame("S-A-"=match_cond2,"S-A+"=match_cond3, "S+A-"=match_cond4, "S+A+"=match_cond5)
+gen_effect.df<- gen_effect
+gen_effect<- gen_effect %>%gather("S-A-", "S-A+", "S+A-", "S+A+", key= Condition, value= Posterior)
+
+violin_gen<- violin_bayes(gen_effect, rope=c(-0.1, 0.1))[[1]]
+violin_gen + 
+  labs(title="Grading effect of generalization",x="Condition", y = "Beta coefficient") + 
+  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+violin_bayes(gen_effect, CI_range=c(0.055, 0.945))[[2]]
+
+p_direction(gen_effect.df)
+rope(gen_effect.df, ci=1, range=c(-0.1, 0.1))
+
+posterior_summary(match_cond2-match_cond3);posterior_summary(match_cond2-match_cond4); posterior_summary(match_cond2-match_cond5)
+posterior_summary(match_cond3-match_cond4); posterior_summary(match_cond3-match_cond5)
+posterior_summary(match_cond4-match_cond5)
+
+test<- cbind.data.frame("SMAM-SMAP"=match_cond2-match_cond3, "SMAM-SPAM"=match_cond2-match_cond4, "SMAM-SPAP"=match_cond2-match_cond5, "SMAP-SPAM"=match_cond3-match_cond4, "SMAP-SPAP"=match_cond3-match_cond5, "SPAM-SPAP"=match_cond4-match_cond5)
+
+point_estimate(test);p_direction (test)
+rope(test,ci=1, range =c(-0.18, 0.18))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
