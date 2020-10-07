@@ -50,12 +50,9 @@ These measures are included to reduce the possibility of participants correctly 
 if (!require(pacman)) install.packages('pacman')
 pacman::p_load(sjstats,sjPlot,lme4,lmerTest,emmeans,ggeffects,simr,tidyverse,MuMIn,brms, bayestestR) 
 
-# Set working directory
-setwd('C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/IPEG/IPEG/IPEG_analysis/') #to change
-
 # source custom codes
-source("source/LMM_scripts.R")
-source("source/Bayes_scripts.R")
+source("C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/source/Bayes_scripts.R")
+source("C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/source/LMM_scripts.R")
 ```
 
 ##Data setup
@@ -88,6 +85,22 @@ IPEG.df<- IPEG.df%>%
                 HT_age_c = ifelse(HT_age=='Old', 1, -1),
                 # Create a dummy variable= for the condition variable
                 dummy_img = as.numeric (Conditions=='Imagine'))
+
+# Set up Back difference coded
+IPEG.df<- IPEG.df%>% 
+              mutate(
+                backdiff_2v1 = ifelse (Match_condition=="Identify",-0.8, 0.2),
+                backdiff_3v2= ifelse(Match_condition=="Identify"|Match_condition=="S-A-", -0.6, 0.4),
+                backdiff_4v3 = ifelse(Match_condition=="S+A-"|Match_condition=="S+A+", 0.6, -0.4),
+                backdiff_5v4 =ifelse (Match_condition=="S+A+",0.8, -0.2))
+
+# Create dummy coded variables, set reference group as Identify
+IPEG.df<- IPEG.df%>% 
+              mutate(
+                dummy_SAMM = as.numeric(Match_condition=="S-A-"),
+                dummy_SMMAM= as.numeric(Match_condition=="S-A+"),
+                dummy_SMAMM = as.numeric(Match_condition=="S+A-"),
+                dummy_SAM =as.numeric(Match_condition=="S+A+"))
 ```
 
 
@@ -102,22 +115,18 @@ ranova(lmer(Help~(1|participant)+(1|Story_ID) +(1|STFace_ID)+(1|HTFace_ID), data
 
 ### Overall Generalizability of Prosoical simulation effect
 ```{r}
-# Zero-correlation parameter model and determine significance of varying slopes
-step(zcp_model<-lmer(Help~Conditions +HT_sex_c+HT_age_c+(dummy_img||participant)+(dummy_img||Story_ID) +(dummy_img||HTFace_ID), data=IPEG.df))# only retain dummy_img in participant
-# Reduced model
+step(lmer(Help~Conditions+HT_sex_c+HT_age_c+(dummy_img||participant)+(dummy_img||Story_ID) +(dummy_img||HTFace_ID), data=IPEG.df))
 zcp_model_rm<-lmer(Help~Conditions +HT_sex_c+HT_age_c+(dummy_img||participant)+(1|Story_ID) +(1|HTFace_ID), data=IPEG.df)
-# Include correlation parameters to retained random slopes
 final_model<- lmer(Help~Conditions+HT_sex_c+HT_age_c+(dummy_img|participant)+(1|Story_ID) +(1|HTFace_ID), data=IPEG.df)
-# Correlation parameters significantly improve model fit
 anova(zcp_model_rm,final_model, refit=F)
-# final_model identified as the parsimonious model
 
-# F-test of fixed effect with Kenward-Roger approximation of degress of freedom found significant condition effect
-anova(final_model, test='kenward-roger')
-
-#extract means for each conditions
-(posthoc<- emmeans(final_model, pairwise~Conditions, adjust= 'none'))
+# Results
+anova(final_model, ddf='Kenward-Roger')
+# Extract means for each conditions
+(posthoc<- emmeans(final_model, pairwise~Conditions))
 confint(posthoc)
+# Effect size
+r.squaredGLMM(final_model)
 ```
 #### Plots
 ```{r}
@@ -137,46 +146,25 @@ plot_model(final_model, type='diag')
 # Random effects in the deviation scale
 plot_model(final_model, type='re')
 ```
-#### Effect size
-* Reference
-** https://besjournals.onlinelibrary.wiley.com/doi/10.1111/j.2041-210x.2012.00261.x
-```{r}
-# R2m = marginal R2 (R2 of fixed effects), R2c= conditional R2 (R2 of fixed + random effects)
-r.squaredGLMM(final_model)
-```
-
 
 ## Generalizability of Prosoical simulation effect by age and sex
 ### Back Difference coding
-#### Coding Match_Condition variable
-```{r}
-# Set up Back difference coded
-IPEG.df<- IPEG.df%>% 
-              mutate(
-                backdiff_2v1 = ifelse (Match_condition=="Identify",-0.8, 0.2),
-                backdiff_3v2= ifelse(Match_condition=="Identify"|Match_condition=="S-A-", -0.6, 0.4),
-                backdiff_4v3 = ifelse(Match_condition=="S+A-"|Match_condition=="S+A+", 0.6, -0.4),
-                backdiff_5v4 =ifelse (Match_condition=="S+A+",0.8, -0.2))
-```
-
 #### Analysis
 ```{r}
-## Zero-correlation parameter model and determine significance of varying slopes
-step(zcp_genmodel<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||participant)  +(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||HTFace_ID)+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||Story_ID), data=IPEG.df, contrast= list (Match_condition= MASS::contr.sdif))) # rertain only backdiff_2v1 and backdiff_5v4 for participant
-# Reduce model
-rm_genmodel<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_5v4||participant)  +(1|HTFace_ID)+(1|Story_ID), data=IPEG.df,contrast= list (Match_condition= MASS::contr.sdif))
-## Model failed to converge, refit the model with better starting values (i.e. end values of previous fits) for REML. Model converged after 3 refits
-rm_genmodel<- refit_LMM(rm_genmodel)
+zcp_step1<-step(lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||participant)  +(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||HTFace_ID)+(backdiff_2v1+backdiff_3v2+backdiff_4v3+backdiff_5v4||Story_ID), data=IPEG.df, contrast= list (Match_condition= MASS::contr.sdif)))
+zcp_step2<-step(zcp_genmodel2<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||participant)  +(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||HTFace_ID)+(dummy_SAMM+dummy_SMMAM+dummy_SMAMM+dummy_SAM||Story_ID), data=IPEG.df))
+
+
+rm_genmodel<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_5v4||participant)+(1|HTFace_ID)+(1|Story_ID), data=IPEG.df,contrast= list (Match_condition= MASS::contr.sdif))
+rm_genmodel<- refit_LMM(rm_genmodel)#3 refits
 ## Final model
 Gen_model<- lmer(Help~Match_condition+HT_sex_c+HT_age_c+(backdiff_2v1+backdiff_5v4|participant)  +(1|HTFace_ID)+(1|Story_ID), data=IPEG.df,contrast= list (Match_condition= MASS::contr.sdif))
 ## Inlcuding correlation parameters did not significantly improve model fit. Thus rm_genmodel is the final model
 anova(rm_genmodel,Gen_model, refit=F)
 
+# Results
+anova(rm_genmodel, ddf='Kenward-Roger')
 
-## Test of fixed effects using F-test
-anova(rm_genmodel, test='kenward-roger')
-## Results
-summary(rm_genmodel)
 ```
 
 
@@ -184,16 +172,6 @@ summary(rm_genmodel)
 
 
 ### Dummy coding
-#### Coding Match_Condition variable
-```{r}
-# Create dummy coded variables, set reference group as Identify
-IPEG.df<- IPEG.df%>% 
-              mutate(
-                dummy_SAMM = as.numeric(Match_condition=="S-A-"),
-                dummy_SMMAM= as.numeric(Match_condition=="S-A+"),
-                dummy_SMAMM = as.numeric(Match_condition=="S+A-"),
-                dummy_SAM =as.numeric(Match_condition=="S+A+"))
-```
 #### Analysis
 ```{r}
 ## Zero-correlation parameter model and Determine significance of varying slopes
@@ -213,12 +191,9 @@ anova(rm_genmodel2,gen_model2, refit=F)
 anova(rm_genmodel2, test='kenward-roger')
 summary(rm_genmodel2)
 
-```
-#### Posthoc
-```{r}
+
 (posthoc_gen<-emmeans(rm_genmodel2, pairwise~Match_condition, adjust= 'bonferroni'))
 ```
-
 #### Plots
 ```{r}
 # Condition differences in willingness to help
@@ -240,7 +215,7 @@ Bayes<- brm(data=IPEG.df, family=cumulative("logit"),
                            prior(normal(0,1.2), class=Intercept),
                            prior(exponential(1), class= sd),
                            prior(lkj(1), class = cor)),
-                  iter=7000,warmup =2000, chains=8, cores=8, seed=20, sample_prior=T,save_all_pars = T, control=list(adapt_delta=0.99))
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T, control=list(adapt_delta=0.99))
 
 
 # Diagnostic Checks
@@ -325,7 +300,23 @@ Bayes_gen<- brm(data=IPEG.df, family=cumulative("logit"),
                            prior(normal(0,1.2), class=Intercept),
                            prior(exponential(1), class= sd),
                            prior(lkj(1), class = cor)),
-                  iter=7000,warmup =2000, chains=8, cores=8, seed=20, sample_prior=T,save_all_pars = T)
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T)
+
+Bayes<- brm(data=IPEG.df, family=cumulative("logit"),
+                      formula= bf(Help~Conditions+HT_sex_c+HT_age_c+(Conditions|participant)+
+                      (Conditions|Story_ID)+(Conditions|HTFace_ID)+(Conditions|STFace_ID)) +
+                   lf(disc~ 0+Conditions, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T, control=list(adapt_delta=0.99))
+null<- brm(data= IPEG.df, family=cumulative("logit"), 
+                  Help~HT_sex_c+HT_age_c+(1|participant)+
+                      (1|Story_ID)+(1|HTFace_ID)+(1|STFace_ID),
+                  prior= c(prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd)), 
+                  iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
 
 # Diagnostic Checks
 ## Posterior prediction check- seems good
@@ -389,15 +380,21 @@ latent_SD(posterior_gen)
 ```{r}
 # Null model 
 null<- brm(data= IPEG.df, family=cumulative("logit"), 
-                  Help~1+(1|participant)+
-                      (1|Story_ID)+(1|HTFace_ID)+(1|STFace_ID)+(1|STFace_ID),
+                  Help~HT_sex_c+HT_age_c+(1|participant)+
+                      (1|Story_ID)+(1|HTFace_ID)+(1|STFace_ID),
                   prior= c(prior(normal(0,1.2), class=Intercept),
                            prior(exponential(1), class= sd)), 
                   iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
 
 set.seed (67)
-unrestricted <- bayes_factor(Bayes_gen, null)
+unrestricted <- bayes_factor(Bayes_gen, Bayes)
+unrestrictedvsnull <- bayes_factor(Bayes_gen, null)
+no_effectvsnull <- bayes_factor(Bayes, null)
 unrestricted$bf
+1/unrestricted$bf
+
+unrestrictedvsnull
+no_effectvsnull
 
 # set ROPE as 0.055
 ## Ordered Restricted model 1
@@ -416,14 +413,6 @@ restrictedmodel2<-(abs(posterior_gen[, "b_Match_conditionSMAM"]-posterior_gen[, 
 
 restricted2.vsrestricted1<-restricted2.vsunrestricted*(1/restricted1.vsunrestricted)
 restricted2.vsrestricted1
-
-test<-(abs(posterior_gen[, "b_Match_conditionSMAM"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
-  (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
-  (abs(posterior_gen[, "b_Match_conditionSPAM"]-posterior_gen[, "b_Match_conditionSPAP"])<0.1)
-(test_BF<-restricted_BF(test, 4e4, 5))
-
-restrictedmodel2_BF/test_BF
-restrictedmodel1_BF/test_BF
 ```
 
 ### Violn plots
