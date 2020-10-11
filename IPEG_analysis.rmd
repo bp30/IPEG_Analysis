@@ -328,8 +328,6 @@ BF01;plot(BF01)
 # Extract posterior samples 
 set.seed(67);posterior_gen<- posterior_samples(Bayes_gen) 
 latent_SD(posterior_gen)
-
-match_cond2<-posterior_gen$b_Match_conditionSMAM;match_cond3<-posterior_gen$b_Match_conditionSMAP;match_cond4<-posterior_gen$b_Match_conditionSPAM;match_cond5<-posterior_gen$b_Match_conditionSPAP
 ```
 
 
@@ -351,16 +349,20 @@ null<- brm(data= IPEG.df, family=cumulative("logit"),
                            prior(exponential(1), class= sd)), 
                   iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
 
-
+# M0/Mu2
 set.seed(67);BF_Mu2_vs_M0 <- bayes_factor(Bayes_gen, null)
 BF_Mu2_vs_M0;1/BF_Mu2_vs_M0$bf
+BF_M0_vs_Mu2<-1/BF_Mu2_vs_M0$bf
+# Mu1/M0
 set.seed(67); BF_Mu1_vs_M0 <- bayes_factor(Bayes, null)
 BF_Mu1_vs_M0
 
-## Ordered Restricted model 1
+# Ordered Restricted model 1
 m1<- (posterior[, "b_ConditionsImagine"]>0) 
+# M1/Mu1
 (BF_M1_vs_Mu1<-restricted_BF(m1, 4e4, 5))
-
+BF_M1_vs_Mu1
+# M1/M0
 (BF_M1_vs_M0<- BF_Mu1_vs_M0$bf * BF_M1_vs_Mu1)
 
 ## Ordered Restricted model 2
@@ -368,51 +370,69 @@ m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
   (posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSMAM"]>0) &
   (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) &
   (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"]>0)
-
+# M2/Mu2
 (BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5))
 
 
-# By transitivity we can obtain M1/M0, M0/M2, and M1/Mu
-BF_M1_vs_Mu2 <- BF_M1_vs_M0 / BF_Mu2_vs_M0$bf
-BF_M0_vs_M2 <- 1/(BF_Mu2_vs_M0$bf * BF_M2_vs_Mu2)
-BF_M1_vs_M2 <- BF_M1_vs_M0 / BF_M2_vs_Mu2
 
-print(paste0("M1/Mu: ", BF_M1_vs_Mu2))
-print(paste0("M0/M2: ",BF_M0_vs_M2))
-print(paste0("M1/M2: ", BF_M1_vs_M2))
-print(paste0("M0/Mu: ", 1/BF_Mu2_vs_M0$bf))
+# By transitivity we can obtain M1/M0, M0/M2, and M1/Mu
+BF_M1_vs_Mu2 <- BF_M1_vs_M0 * BF_M0_vs_Mu2
+BF_Mu1_vs_Mu2 <- BF_Mu1_vs_M0$bf * BF_M0_vs_Mu2
+BF_M0_vs_M2 <- BF_M0_vs_Mu2 / BF_M2_vs_Mu2
+BF_M1_vs_M2 <- BF_M1_vs_M0 * BF_M0_vs_M2
+BF_Mu1_vs_M2 <- BF_Mu1_vs_M0$bf * BF_M0_vs_M2
+
+# BFs
+print(paste0("M1/Mu1: ", BF_M1_vs_Mu1))
 print(paste0("M1/M0: ", BF_M1_vs_M0))
-print(paste0("M2/Mu: ", BF_M2_vs_Mu2))
+print(paste0("M1/M2: ", BF_M1_vs_M2))
+print(paste0("M1/Mu2: ", BF_M1_vs_Mu2))
+
+print(paste0("Mu1/M0: ", BF_Mu1_vs_M0$bf))
+print(paste0("Mu1/M2: ", BF_Mu1_vs_M2))
+print(paste0("Mu1/Mu2: ", BF_Mu1_vs_Mu2))
+
+print(paste0("M0/M2: ", BF_M0_vs_M2))
+print(paste0("M0/Mu2: ", BF_M0_vs_Mu2))
+
+print(paste0("M2/Mu2: ", BF_M2_vs_Mu2))
 
 ```
 
 ### Violn plots
 ```{r}
-match_cond2<-posterior_gen$b_Match_conditionSMAM
-match_cond3<-posterior_gen$b_Match_conditionSMAP
-match_cond4<-posterior_gen$b_Match_conditionSPAM
-match_cond5<-posterior_gen$b_Match_conditionSPAP
-gen_effect<- cbind.data.frame("S-A-"=match_cond2,"S-A+"=match_cond3, "S+A-"=match_cond4, "S+A+"=match_cond5)
+gen_effect<- cbind.data.frame("S-A-"=posterior_gen$b_Match_conditionSMAM,
+                              "S-A+"=posterior_gen$b_Match_conditionSMAP, 
+                              "S+A-"=posterior_gen$b_Match_conditionSPAM, 
+                              "S+A+"=posterior_gen$b_Match_conditionSPAP)
 gen_effect.df<- gen_effect
 gen_effect<- gen_effect %>%gather("S-A-", "S-A+", "S+A-", "S+A+", key= Condition, value= Posterior)
-
-violin_gen<- violin_bayes(gen_effect, rope=c(-0.1, 0.1))[[1]]
+violin_gen<- violin_bayes(gen_effect)[[1]]
 violin_gen + 
   labs(title="Grading effect of generalization",x="Condition", y = "Beta coefficient") + 
   stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+# Summaries
 violin_bayes(gen_effect, CI_range=c(0.055, 0.945))[[2]]
-
+# pd
 p_direction(gen_effect.df)
+# % in ROPE
 rope(gen_effect.df, ci=1, range=c(-0.1, 0.1))
-
-test<- cbind.data.frame("SMAM-SMAP"=match_cond2-match_cond3, "SMAM-SPAM"=match_cond2-match_cond4, "SMAM-SPAP"=match_cond2-match_cond5, "SMAP-SPAM"=match_cond3-match_cond4, "SMAP-SPAP"=match_cond3-match_cond5, "SPAM-SPAP"=match_cond4-match_cond5)
-test.df<-test
-test.df <-test.df %>%gather("SMAM-SMAP", "SMAM-SPAM", "SMAM-SPAP", "SMAP-SPAM","SMAP-SPAP","SPAM-SPAP", key= Condition, value= Posterior)
-test_plot<- violin_bayes(test.df)[[1]]
-violin_bayes(test.df)[[2]]
-
-point_estimate(test);p_direction (test)
-rope(test,ci=1, range =c(-0.18, 0.18))
+#-------------------------------------------------------------------------------------------------------------
+# Contrasts between conditions
+cond_contrasts<- BF01$samples
+colnames(cond_contrasts) <- c("S-A->S-A+", "S-A->S+A-","S-A->S+A+", "S-A+>S+A-", "S-A+>S+A+", "S+A->S+A+")
+cond_contrasts.df<- cond_contrasts
+cond_contrasts <-cond_contrasts %>% gather("S-A->S-A+", "S-A->S+A-","S-A->S+A+", "S-A+>S+A-", "S-A+>S+A+", "S+A->S+A+", key= Condition, value= Posterior)
+contrast_plot<- violin_bayes(cond_contrasts)[[1]]
+contrast_plot + 
+  labs(title="Grading effect of generalization",x="Condition Contrast", y = "Beta coefficient") + 
+  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+# Summaries
+violin_bayes(cond_contrasts, CI_range=c(0.055, 0.945))[[2]]
+# pd and direction
+p_direction (cond_contrasts.df)
+# % in ROPE
+rope(cond_contrasts.df,ci=1, range =c(-0.18, 0.18))
 ```
 
 
