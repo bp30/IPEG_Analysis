@@ -333,7 +333,7 @@ latent_SD(posterior_gen)
 
 
 
-### Order restricted model 
+### Order restricted model - with Idebtify
 * Models to be compared
 ** 1) a null model M0: all conditions (including control) are ~ equal
 ** 2) Unrestricted model Mu1: Identify != S-A- = S+A- = S-A+ = S+A+
@@ -350,10 +350,30 @@ null<- brm(data= IPEG.df, family=cumulative("logit"),
                            prior(normal(0,1.2), class=Intercept),
                            prior(exponential(1), class= sd)), 
                   iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
+# Mu1
+Bayes<- brm(data=IPEG.df, family=cumulative("logit"),
+                      formula= bf(Help~Conditions+HT_sex_c+HT_age_c+(Conditions|participant)+
+                      (Conditions|Story_ID)+(Conditions|HTFace_ID)+(Conditions|STFace_ID)) +
+                   lf(disc~ 0+Conditions, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T, control=list(adapt_delta=0.99))
+
+# Mu2
+Bayes_gen<- brm(data=IPEG.df, family=cumulative("logit"),
+                      bf(Help~Match_condition+HT_sex_c+HT_age_c+(Match_condition|participant)+
+                              (Match_condition|Story_ID)+(Match_condition|HTFace_ID)+(Match_condition|STFace_ID)) +
+                          lf(disc~ 0+Match_condition, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T)
 
 # M0/Mu2
 set.seed(67);BF_Mu2_vs_M0 <- bayes_factor(Bayes_gen, null)
-BF_Mu2_vs_M0;1/BF_Mu2_vs_M0$bf
 BF_M0_vs_Mu2<-1/BF_Mu2_vs_M0$bf
 # Mu1/M0
 set.seed(67); BF_Mu1_vs_M0 <- bayes_factor(Bayes, null)
@@ -377,7 +397,7 @@ m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
 # By transitivity we can obtain M1/M0, M0/M2, and M1/Mu
 BF_M1_vs_Mu2 <- BF_M1_vs_M0 * BF_M0_vs_Mu2
 BF_Mu1_vs_Mu2 <- BF_Mu1_vs_M0$bf * BF_M0_vs_Mu2
-BF_M0_vs_M2 <- BF_M0_vs_Mu2 / BF_M2_vs_Mu2
+BF_M2_vs_M0 <- BF_M2_vs_Mu2 / BF_M0_vs_Mu2
 BF_M1_vs_M2 <- BF_M1_vs_M0 * BF_M0_vs_M2
 BF_Mu1_vs_M2 <- BF_Mu1_vs_M0$bf * BF_M0_vs_M2
 
@@ -391,7 +411,7 @@ print(paste0("Mu1/M2: ", BF_Mu1_vs_M2))
 print(paste0("Mu1/M0: ", BF_Mu1_vs_M0$bf))
 print(paste0("Mu1/Mu2: ", BF_Mu1_vs_Mu2))
 
-print(paste0("M2/M0: ", 1/BF_M0_vs_M2))
+print(paste0("M2/M0: ", BF_M2_vs_M0))
 print(paste0("M2/Mu2: ", BF_M2_vs_Mu2))
 
 print(paste0("M0/Mu2: ", BF_M0_vs_Mu2))
@@ -435,6 +455,62 @@ violin_bayes(cond_contrasts, CI_range=c(0.055, 0.945))[[2]]
 p_direction (cond_contrasts.df)
 # % in ROPE
 rope(cond_contrasts.df,ci=1, range =c(-0.18, 0.18))
+```
+
+
+### Order restricted model - without Identify
+* Models to be compared
+** 1) a null model M0: all imagine helping conditions  are ~ equal
+** 2) Unrestricted model Mu:  S-A- != S+A- != S-A+ != S+A+
+** 3) ordered model2 (theory driven) M1: Identify < S-A- < S+A- = S-A+ < S+A+
+
+```{r}
+no_control.df<-IPEG.df[IPEG.df$Match_condition!="Identify",]
+
+# Null model 
+null_NC<- brm(data= no_control.df, family=cumulative("logit"), 
+                  Help~HT_sex_c+HT_age_c+(1|participant)+
+                      (1|Story_ID)+(1|HTFace_ID)+(1|STFace_ID),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd)), 
+                  iter=7000,warmup=2000,chains=8, cores=8, seed=67, sample_prior=T, save_all_pars = T)
+# Mu2
+Bayes_gen_NC<- brm(data=no_control.df, family=cumulative("logit"),
+                      bf(Help~Match_condition+HT_sex_c+HT_age_c+(Match_condition|participant)+
+                              (Match_condition|Story_ID)+(Match_condition|HTFace_ID)+(Match_condition|STFace_ID)) +
+                          lf(disc~ 0+Match_condition, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T)
+set.seed(67);posterior_gen_NC<- posterior_samples(Bayes_gen_NC) 
+
+# M0/Mu
+set.seed(67);BF_Mu_vs_M0_NC <- bayes_factor(Bayes_gen_NC, null_NC)
+(BF_M0_vs_Mu_NC<-1/BF_Mu_vs_M0_NC$bf)
+
+
+## Ordered Restricted model 1
+m1_NC<- (posterior_gen_NC[, "b_Match_conditionSMAP"]>0) &
+  (abs(posterior_gen_NC[, "b_Match_conditionSMAP"] - posterior_gen_NC[, "b_Match_conditionSPAM"]) < 0.1) &
+  (posterior_gen_NC[, "b_Match_conditionSPAP"] > posterior_gen_NC[, "b_Match_conditionSPAM"])
+# M1/Mu
+(BF_M1_vs_Mu_NC<-restricted_BF(m1_NC, 4e4, 4))
+
+
+
+
+# By transitivity 
+BF_Mu_vs_M1_NC <- 1/BF_M1_vs_Mu_NC
+BF_M0_vs_M1_NC <- BF_M0_vs_Mu_NC * BF_Mu_vs_M1_NC
+
+
+# BFs
+print(paste0("M0/Mu: ", BF_M0_vs_Mu_NC))
+print(paste0("M0/M1: ", BF_M0_vs_M1_NC))
+print(paste0("Mu/M1: ", BF_Mu_vs_M1_NC))
 ```
 
 
