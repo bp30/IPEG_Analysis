@@ -433,7 +433,7 @@ m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
   (posterior_gen[, "b_Match_conditionSMAP"] < posterior_gen[, "b_Match_conditionSPAM"]) & 
   (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"]>0)
 # M2/Mu2
-(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5))
+(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5, 3))
 
 
 
@@ -498,10 +498,7 @@ m1_NC<- (posterior_gen_NC[, "b_Match_conditionSMAP"]>0) &
   (posterior_gen[, "b_Match_conditionSMAP"] < posterior_gen[, "b_Match_conditionSPAM"]) & 
   (posterior_gen_NC[, "b_Match_conditionSPAP"] > posterior_gen_NC[, "b_Match_conditionSPAM"])
 # M1/Mu
-(BF_M1_vs_Mu_NC<-restricted_BF(m1_NC, 4e4, 4))
-
-
-
+(BF_M1_vs_Mu_NC<-restricted_BF(m1_NC, 4e4, 4, 3))
 
 # By transitivity 
 BF_M1_vs_M0_NC <-BF_M0_vs_Mu_NC / BF_M1_vs_Mu_NC 
