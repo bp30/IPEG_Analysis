@@ -420,21 +420,20 @@ BF_M0_vs_Mu2<-1/BF_Mu2_vs_M0$bf
 
 
 # Ordered Restricted model 1
-m1<- (posterior[, "b_ConditionsImagine"]>0) 
+m1 <- (posterior[, "b_ConditionsImagine"]>0) 
 # M1/Mu1
-(BF_M1_vs_Mu1<-restricted_BF(m1, 4e4, 2))
+(BF_M1_vs_Mu1 <- restricted_BF(m1, 4e4, 2))
 
 
 ## Ordered Restricted model 2
 m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
-  (posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSMAM"]>0) &
-  (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"])<0.1) |
+  (posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSMAM"] > 0) &
+  (abs(posterior_gen[, "b_Match_conditionSMAP"]-posterior_gen[, "b_Match_conditionSPAM"]) <= 0.1) |
   (posterior_gen[, "b_Match_conditionSMAP"] > posterior_gen[, "b_Match_conditionSPAM"]) |
   (posterior_gen[, "b_Match_conditionSMAP"] < posterior_gen[, "b_Match_conditionSPAM"]) & 
-  (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"]>0)
+  (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"] > 0)
 # M2/Mu2
-(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5, 3))
-
+(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5))
 
 
 # By transitivity
@@ -452,6 +451,9 @@ print(paste0("M2/M0: ", BF_M2_vs_M0))
 print(paste0("M2/Mu2: ", BF_M2_vs_Mu2))
 
 print(paste0("M0/Mu2: ", BF_M0_vs_Mu2))
+
+
+# I don't think the 1/total permutation prior includes = in the model if it is contrasting to Mu which assumes all condition are dissimilar, so for example permutation of 2 is 2 only A < B and A > B but does not account for A = B
 ```
 
 
@@ -493,12 +495,12 @@ set.seed(67);BF_Mu_vs_M0_NC <- bayes_factor(Bayes_gen_NC, null_NC)
 
 ## Ordered Restricted model 1
 m1_NC<- (posterior_gen_NC[, "b_Match_conditionSMAP"]>0) &
-  (abs(posterior_gen_NC[, "b_Match_conditionSMAP"] - posterior_gen_NC[, "b_Match_conditionSPAM"]) < 0.1) |
+  (abs(posterior_gen_NC[, "b_Match_conditionSMAP"] - posterior_gen_NC[, "b_Match_conditionSPAM"]) <= 0.1) |
   (posterior_gen[, "b_Match_conditionSMAP"] > posterior_gen[, "b_Match_conditionSPAM"]) |
   (posterior_gen[, "b_Match_conditionSMAP"] < posterior_gen[, "b_Match_conditionSPAM"]) & 
   (posterior_gen_NC[, "b_Match_conditionSPAP"] > posterior_gen_NC[, "b_Match_conditionSPAM"])
 # M1/Mu
-(BF_M1_vs_Mu_NC<-restricted_BF(m1_NC, 4e4, 4, 3))
+(BF_M1_vs_Mu_NC<-restricted_BF(m1_NC, 4e4, 4))
 
 # By transitivity 
 BF_M1_vs_M0_NC <-BF_M0_vs_Mu_NC / BF_M1_vs_Mu_NC 
