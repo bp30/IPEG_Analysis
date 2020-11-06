@@ -372,13 +372,15 @@ rope(cond_contrasts.df,ci=1, range =c(-0.18, 0.18))
 
 
 
-### Order restricted model - with Idebtify
+### Order restricted model - with Identify
 * Models to be compared
 ** 1) a null model M0: all conditions (including control) are ~ equal
 ** 2) Unrestricted model Mu1: Identify != S-A- = S+A- = S-A+ = S+A+
 ** 3) Unrestricted model Mu2: Identify != S-A- != S+A- != S-A+ != S+A+
-** 4) ordered model1 M1:  Identify < S-A- = S+A- = S-A+ = S+A+
-** 5) ordered model2 (theory driven) M2: Identify < S-A- < S+A- = S-A+ < S+A+
+** 4) Unrestricted model Mu3: Identify != S-A- = S+A- = S-A+ != S+A+
+** 5) ordered model1 M1:  Identify < S-A- = S+A- = S-A+ = S+A+
+** 6) ordered model2 (theory driven) M2: Identify < S-A- < S+A- = S-A+ < S+A+
+** 7) ordered model3 M3: Identify < S-A- = S+A- = S-A+ < S+A+
 
 ```{r}
 # Null model 
@@ -411,19 +413,37 @@ Bayes_gen<- brm(data=IPEG.df, family=cumulative("logit"),
                            prior(lkj(1), class = cor)),
                   iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T)
 
+IPEG.df<- IPEG.df%>% 
+              mutate(ORM_code = ifelse(Match_condition=='Identify', "Identify",
+                                  ifelse(Match_condition=='S+A+','S+A+', "Imagine")))
+IPEG.df$ORM_code <- as.factor (IPEG.df$ORM_code)
+IPEG.df$ORM_code <- relevel(IPEG.df$ORM_code, ref = "Identify")
+# Mu3
+Bayes_gen2<- brm(data=IPEG.df, family=cumulative("logit"),
+                      bf(Help~ORM_code+HT_sex_c+HT_age_c+(ORM_code|participant)+
+                              (ORM_code|Story_ID)+(ORM_code|HTFace_ID)+(ORM_code|STFace_ID)) +
+                          lf(disc~ 0+Match_condition, cmc=F),
+                  prior= c(prior(normal (0,1), class=b),
+                           prior(normal(0,1.2), class=Intercept),
+                           prior(exponential(1), class= sd),
+                           prior(lkj(1), class = cor)),
+                  iter=7000,warmup =2000, chains=8, cores=8, seed=67, sample_prior=T,save_all_pars = T)
+set.seed(67);posterior_mu3<- posterior_samples(Bayes_gen2) 
+
 # Mu1/M0
 set.seed(67); BF_Mu1_vs_M0 <- bayes_factor(Bayes, null)
 BF_Mu1_vs_M0
 # M0/Mu2
 set.seed(67);BF_Mu2_vs_M0 <- bayes_factor(Bayes_gen, null)
 BF_M0_vs_Mu2<-1/BF_Mu2_vs_M0$bf
-
+# M0/Mu3
+set.seed(67);BF_Mu3_vs_M0 <- bayes_factor(Bayes_gen2, null)
+BF_M0_vs_Mu3<-1/BF_Mu3_vs_M0$bf
 
 # Ordered Restricted model 1
 m1 <- (posterior[, "b_ConditionsImagine"]>0) 
 # M1/Mu1
 (BF_M1_vs_Mu1 <- restricted_BF(m1, 4e4, 2))
-
 
 ## Ordered Restricted model 2
 m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
@@ -435,20 +455,34 @@ m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
 # M2/Mu2
 (BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5))
 
+## Order restricted model 3
+m3<-(posterior_mu3[, "b_ORM_codeImagine"] > 0) &
+    (posterior_mu3[, "b_ORM_codeImagine"] < posterior_mu3[, "b_ORM_codeSPAP"]) &
+    (posterior_mu3[, "b_ORM_codeSPAP"] > 0)
+(BF_M3_vs_Mu3 <- restricted_BF(m3, 4e4, 3))
 
 # By transitivity
-BF_M1_vs_M2 <- BF_M1_vs_M0 * BF_M0_vs_M2
 BF_M1_vs_M0<- BF_Mu1_vs_M0$bf * BF_M1_vs_Mu1
-BF_M1_vs_Mu2 <- BF_M1_vs_M0 * BF_M0_vs_Mu2
 BF_M2_vs_M0 <-  BF_M2_vs_Mu2 / BF_M0_vs_Mu2
+BF_M3_vs_M0 <- BF_M3_vs_Mu3 * BF_Mu3_vs_M0$bf
+BF_M1_vs_M2 <- BF_M1_vs_M0 * BF_M0_vs_M2
+BF_M1_vs_M3 <- BF_M1_vs_M0 / BF_M3_vs_M0
+BF_M1_vs_Mu2 <- BF_M1_vs_M0 * BF_M0_vs_Mu2
+BF_M2_vs_M3 <- BF_M2_vs_M0 / BF_M3_vs_M0
+BF_M3_vs_Mu2 <- BF_M3_vs_M0 * BF_M0_vs_Mu2
 
 # BFs
 print(paste0("M1/M2: ", BF_M1_vs_M2))
+print(paste0("M1/M3: ", BF_M1_vs_M3))
 print(paste0("M1/M0: ", BF_M1_vs_M0))
 print(paste0("M1/Mu2: ", BF_M1_vs_Mu2))
 
+print(paste0("M2/M3: ", BF_M2_vs_M3))
 print(paste0("M2/M0: ", BF_M2_vs_M0))
 print(paste0("M2/Mu2: ", BF_M2_vs_Mu2))
+
+print(paste0("M3/M0: ", BF_M3_vs_M0))
+print(paste0("M3/Mu2: ", BF_M3_vs_Mu2))
 
 print(paste0("M0/Mu2: ", BF_M0_vs_Mu2))
 
