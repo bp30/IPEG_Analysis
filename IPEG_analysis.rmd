@@ -453,7 +453,7 @@ m2<- (posterior_gen[, "b_Match_conditionSMAM"]>0) &
   (posterior_gen[, "b_Match_conditionSMAP"] < posterior_gen[, "b_Match_conditionSPAM"]) & 
   (posterior_gen[, "b_Match_conditionSPAP"]-posterior_gen[, "b_Match_conditionSPAM"] > 0)
 # M2/Mu2
-(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5))
+(BF_M2_vs_Mu2<-restricted_BF(m2, 4e4, 5, 2))
 
 ## Order restricted model 3
 m3<-(posterior_mu3[, "b_ORM_codeImagine"] > 0) &
@@ -465,7 +465,7 @@ m3<-(posterior_mu3[, "b_ORM_codeImagine"] > 0) &
 BF_M1_vs_M0<- BF_Mu1_vs_M0$bf * BF_M1_vs_Mu1
 BF_M2_vs_M0 <-  BF_M2_vs_Mu2 / BF_M0_vs_Mu2
 BF_M3_vs_M0 <- BF_M3_vs_Mu3 * BF_Mu3_vs_M0$bf
-BF_M1_vs_M2 <- BF_M1_vs_M0 * BF_M0_vs_M2
+BF_M1_vs_M2 <- BF_M1_vs_M0 / BF_M2_vs_M0
 BF_M1_vs_M3 <- BF_M1_vs_M0 / BF_M3_vs_M0
 BF_M1_vs_Mu2 <- BF_M1_vs_M0 * BF_M0_vs_Mu2
 BF_M2_vs_M3 <- BF_M2_vs_M0 / BF_M3_vs_M0
