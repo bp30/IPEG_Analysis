@@ -53,6 +53,9 @@ pacman::p_load(sjstats,sjPlot,lme4,lmerTest,emmeans,ggeffects,tidyverse,MuMIn,br
 # source custom codes
 source("C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/source/Bayes_scripts.R")
 source("C:/Users/dpen466/Google Drive/Phd (1)/Experiment/Studies/Data/IPE/source/LMM_scripts.R")
+
+# ggplot colours
+palette <- c("#eeaa7b", "#00b159", "#00aedb", "#F8766D", "#9590FF", "#CC9933", "#0000FF")
 ```
 
 ##Data setup
@@ -71,7 +74,7 @@ levels (IPEG.df$Conditions) <- c('Identify', 'Imagine')
 
 # Data transformations 
 ## Generate the five factor variable for Match conditions
-IPEG.df$Match_condition<- IPEG.df$Match +1
+IPEG.df$Match_condition<- IPEG.df$Match + 1
 IPEG.df$Match_condition[IPEG.df$Conditions=="Identify"] <- 1
 IPEG.df$Match_condition <- as.factor(IPEG.df$Match_condition)
 levels(IPEG.df$Match_condition) <- c("Identify","S-A-", "S-A+","S+A-", "S+A+")
@@ -84,23 +87,30 @@ IPEG.df<- IPEG.df%>%
                 # Effect code age of helping targets (1=Old, -1=Young)
                 HT_age_c = ifelse(HT_age=='Old', 1, -1),
                 # Create a dummy variable= for the condition variable
-                dummy_img = as.numeric (Conditions=='Imagine'))
+                dummy_img = as.numeric (Conditions=='Imagine'),
+                Coherence_C=group_center(Coherence,participant),
+                Detail_C=group_center(Detail,participant))
 
 # Set up Back difference coded
 IPEG.df<- IPEG.df%>% 
               mutate(
                 backdiff_2v1 = ifelse (Match_condition=="Identify",-0.8, 0.2),
-                backdiff_3v2= ifelse(Match_condition=="Identify"|Match_condition=="S-A-", -0.6, 0.4),
+                backdiff_3v2 = ifelse(Match_condition=="Identify"|Match_condition=="S-A-", -0.6, 0.4),
                 backdiff_4v3 = ifelse(Match_condition=="S+A-"|Match_condition=="S+A+", 0.6, -0.4),
                 backdiff_5v4 =ifelse (Match_condition=="S+A+",0.8, -0.2))
 
 # Create dummy coded variables, set reference group as Identify
-IPEG.df<- IPEG.df%>% 
+IPEG.df<- IPEG.df %>% 
               mutate(
                 dummy_SAMM = as.numeric(Match_condition=="S-A-"),
                 dummy_SMMAM= as.numeric(Match_condition=="S-A+"),
                 dummy_SMAMM = as.numeric(Match_condition=="S+A-"),
                 dummy_SAM =as.numeric(Match_condition=="S+A+"))
+
+
+# vividness df
+vivid.df <- IPEG.df %>%
+                filter(Conditions == 'Imagine')
 ```
 
 
@@ -291,6 +301,7 @@ p_direction(PSE_dif.df)
 # % in ROPE
 rope(PSE_dif.df, ci=1, range=c(-0.1, 0.1))
 ```
+
 
 
 ## Grading effect of prosocial simulation effect 
@@ -648,6 +659,71 @@ print(paste0("Mu2/M0: ", 1/BF_M0_vs_Mu2_NR))
 
 
 
+## Vividness
+```{r}
+# Detail
+IPEG_det_IH <- brm(data = vivid.df, family = cumulative("logit"),
+                      formula = bf(Help ~ Detail_C + HT_sex_c + HT_age_c + (Detail_C|participant) +
+                      (Detail_C|Story_ID) + (Detail_C|HTFace_ID) + (Detail_C|STFace_ID)),
+                  prior = c(prior(normal(0,1), class = b),
+                            prior(normal(0,1.2), class = Intercept),
+                            prior(exponential(1), class = sd),
+                            prior(lkj(1), class = cor)),
+                  iter = 7000 ,warmup = 2000, chains = 8, cores = 8, seed = 67, sample_prior = T,save_all_pars = T)
+
+pp_check(IPEG_det_IH)
+bayes_samples(IPEG_det_IH)
+# Summary
+summary(IPEG_det_IH, prob = 0.89)
+# pd
+p_direction(IPEG_det_IH, parameters = c("b_Detail_C"))
+# Extract posterior samples 
+set.seed(67);posterior_det_IPEG <- posterior_samples(IPEG_det_IH)
+# OR
+posterior_summary(exp(posterior_det_IPEG$`b_Detail_C`), probs=c(0.055, 0.945))
+#------------------------------------------------------------------------------------------------------------------------
+# Coherence
+IPEG_coh_IH <- brm(data = vivid.df, family = cumulative("logit"),
+                      formula = bf(Help ~ Coherence_C + HT_sex_c + HT_age_c + (Coherence_C|participant) +
+                      (Coherence_C|Story_ID) + (Coherence_C|HTFace_ID) + (Coherence_C|STFace_ID)),
+                  prior = c(prior(normal(0, 1), class = b),
+                            prior(normal(0, 1.2), class = Intercept),
+                            prior(exponential(1), class = sd),
+                            prior(lkj(1), class = cor)),
+                  iter = 7000 ,warmup = 2000, chains = 8, cores = 8, seed = 67, sample_prior = T,save_all_pars = T)
+
+pp_check(IPEG_coh_IH)
+bayes_samples(IPEG_coh_IH)
+# Summary
+summary(IPEG_coh_IH, prob = 0.89)
+# pd
+p_direction(IPEG_coh_IH, parameters = c("b_Coherence_C"))
+# Extract posterior samples 
+set.seed(67);posterior_coh_IPEG <- posterior_samples(IPEG_coh_IH)
+# OR
+posterior_summary(exp(posterior_coh_IPEG$`b_Coherence_C`), probs=c(0.055, 0.945))
+
+```
+#### Plots
+```{r}
+# Violin plots -- Detail and Coherence
+IPEG_vivid <- cbind.data.frame('Detail' = posterior_det_IPEG$b_Detail_C, "Coherence" = posterior_coh_IPEG$b_Coherence_C)
+plot_vivid_IPEG <- IPEG_vivid %>% gather("Detail", "Coherence",  key = Condition, value = Posterior)
+violin_vivid_IPEG <- violin_bayes(plot_vivid_IPEG, HDI_range = c(0.055, 0.945))[[1]]
+violin_vivid_IPEG +
+  labs(x = "Vividness measures", y = "logit") +
+  theme(legend.position='none') +
+  ylim(-0.5, 1) +
+  scale_fill_manual(values = c(palette[2], palette[3])) +
+  scale_color_manual(values = c(palette[2], palette[3]))
+
+# Summary
+violin_bayes(plot_vivid_IPEG, HDI_range = c(0.055, 0.945))[[2]]
+# pd 
+p_direction(IPEG_vivid)
+# OR
+posterior_summary(exp(IPEG_vivid), probs = c(0.055, 0.945))
+```
 
 
 
