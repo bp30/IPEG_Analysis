@@ -343,18 +343,23 @@ latent_SD(posterior_gen)
 ```
 ### Violn plots
 ```{r}
-gen_effect<- cbind.data.frame("S-A-"=posterior_gen$b_Match_conditionSMAM,
-                              "S-A+"=posterior_gen$b_Match_conditionSMAP, 
-                              "S+A-"=posterior_gen$b_Match_conditionSPAM, 
-                              "S+A+"=posterior_gen$b_Match_conditionSPAP)
-gen_effect.df<- gen_effect
-gen_effect<- gen_effect %>%gather("S-A-", "S-A+", "S+A-", "S+A+", key= Condition, value= Posterior)
-violin_gen<- violin_bayes(gen_effect)[[1]]
+gen_effect <- cbind.data.frame("S-A-" = posterior_gen$b_Match_conditionSMAM,
+                              "S-A+" = posterior_gen$b_Match_conditionSMAP, 
+                              "S+A-" = posterior_gen$b_Match_conditionSPAM, 
+                              "S+A+" = posterior_gen$b_Match_conditionSPAP)
+gen_effect.df <- gen_effect
+gen_effect <- gen_effect %>% gather("S-A-", "S-A+", "S+A-", "S+A+", key = Condition, value = Posterior)
+violin_gen <- violin_bayes(gen_effect, HDI_range=c(0.055, 0.945))[[1]]
 violin_gen + 
-  labs(title="Grading effect of generalization",x="Condition", y = "Beta coefficient") + 
-  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  labs(x = "Condition Contrast", y = "Logit") +
+  scale_x_discrete(labels = c("S-A-" = "S-A- > Control", "S-A+" = "S-A+ > Control", "S+A-" = "S+A- > Control", "S+A+" = "S+A+ > Control"))
+  
 # Summaries
-violin_bayes(gen_effect, CI_range=c(0.055, 0.945))[[2]]
+violin_bayes(gen_effect, HDI_range =c(0.055, 0.945))[[2]]
+#pd
+p_direction (gen_effect.df)
+# OR
+posterior_summary(exp(gen_effect.df), probs=c(0.055, 0.945))
 #-------------------------------------------------------------------------------------------------------------
 # Plot the predicted probability of each category on the outcome measure for each condition
 Gen_plot<-conditional_effects(Bayes_gen,categorical=T)
@@ -365,20 +370,26 @@ plot(Gen_plot)[[1]] +
   ylim (0, 0.45)
 #-------------------------------------------------------------------------------------------------------------
 # Contrasts between conditions
-cond_contrasts<- BF01$samples
-colnames(cond_contrasts) <- c("S-A->S-A+", "S-A->S+A-","S-A->S+A+", "S-A+>S+A-", "S-A+>S+A+", "S+A->S+A+")
+cond_contrasts <- cbind.data.frame ("S-A-<S-A+" = gen_effect.df$`S-A+` - gen_effect.df$`S-A-`, 
+                                    "S-A-<S+A-" = gen_effect.df$`S+A-` - gen_effect.df$`S-A-`,
+                                    "S-A-<S+A+" = gen_effect.df$`S+A+` - gen_effect.df$`S-A-`,
+                                    "S-A+<S+A-" = gen_effect.df$`S+A-` - gen_effect.df$`S-A+`,
+                                    "S-A+<S+A+" = gen_effect.df$`S+A+` - gen_effect.df$`S-A+`,
+                                    "S+A-<S+A+" = gen_effect.df$`S+A+` - gen_effect.df$`S+A-`)
+colnames(cond_contrasts) <- c("S-A-<S-A+", "S-A-<S+A-","S-A-<S+A+", "S-A+<S+A-", "S-A+<S+A+", "S+A-<S+A+")
 cond_contrasts.df<- cond_contrasts
-cond_contrasts <-cond_contrasts %>% gather("S-A->S-A+", "S-A->S+A-","S-A->S+A+", "S-A+>S+A-", "S-A+>S+A+", "S+A->S+A+", key= Condition, value= Posterior)
-contrast_plot<- violin_bayes(cond_contrasts)[[1]]
+cond_contrasts <- cond_contrasts %>% gather("S-A-<S-A+", "S-A-<S+A-","S-A-<S+A+", "S-A+<S+A-", "S-A+<S+A+", "S+A-<S+A+", key = Condition, value= Posterior)
+contrast_plot<- violin_bayes(cond_contrasts, HDI_range=c(0.055, 0.945))[[1]]
 contrast_plot + 
-  labs(title="Grading effect of generalization",x="Condition Contrast", y = "Beta coefficient") + 
-  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  labs(x="Condition Contrast", y = "Logit")
 # Summaries
-violin_bayes(cond_contrasts, CI_range=c(0.055, 0.945))[[2]]
+violin_bayes(cond_contrasts, HDI_range=c(0.055, 0.945))[[2]]
 # pd and direction
 p_direction (cond_contrasts.df)
 # % in ROPE
 rope(cond_contrasts.df,ci=1, range =c(-0.18, 0.18))
+# ORs
+posterior_summary(exp(cond_contrasts.df), probs=c(0.055, 0.945))
 ```
 
 
@@ -703,7 +714,7 @@ set.seed(67);posterior_coh_IPEG <- posterior_samples(IPEG_coh_IH)
 # OR
 posterior_summary(exp(posterior_coh_IPEG$`b_Coherence_C`), probs=c(0.055, 0.945))
 
-```
+
 #### Plots
 ```{r}
 # Violin plots -- Detail and Coherence
