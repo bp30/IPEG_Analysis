@@ -88,8 +88,8 @@ IPEG.df<- IPEG.df%>%
                 HT_age_c = ifelse(HT_age=='Old', 1, -1),
                 # Create a dummy variable= for the condition variable
                 dummy_img = as.numeric (Conditions=='Imagine'),
-                Coherence_C=group_center(Coherence,participant),
-                Detail_C=group_center(Detail,participant))
+                Coherence_C = group_center(Coherence, participant),
+                Detail_C = group_center(Detail, participant))
 
 # Set up Back difference coded
 IPEG.df<- IPEG.df%>% 
@@ -226,7 +226,7 @@ bayes_samples(Bayes)
 set.seed(67);prior_sim(Bayes, c("sd_participant", 'cor_participant', "b"))
 
 # Results
-summary(Bayes, probs=0.89)
+summary(Bayes, prob=0.89)
 # pd
 p_direction(Bayes, parameters = "b_Conditions")
 # % in ROPE
@@ -235,6 +235,10 @@ rope(Bayes,ci=1, range = c(-0.10, 0.10), parameters = "b_Conditions")
 # Extract posterior samples 
 set.seed(67);posterior<- posterior_samples(Bayes) 
 latent_SD(posterior)
+
+
+# OR
+posterior_summary(exp(posterior$b_ConditionsImagine), probs=c(0.055, 0.945))
 ```
 ### Plots
 ```{r}
@@ -251,6 +255,8 @@ ggplot(plot.df, aes(x=1, y=Posterior))+
                       theme(legend.position = "none") +
                       xlab("Imagine Helping>Identify Media Source") +
                       scale_x_discrete(labels=c(""))
+
+
 # Plot the predicted probability of each category on the outcome measure for each condition
 PSE_plot<-conditional_effects(Bayes,categorical=T)
 plot(PSE_plot)[[1]] +
@@ -271,13 +277,15 @@ PSE<- cbind.data.frame("IPE"=IPE_imagine.df,
                        "IPEG"=posterior$b_ConditionsImagine)
 PSE.df<- PSE
 PSE<- PSE %>% gather("IPE","IPEF", 'IPEG', key= Condition, value= Posterior)
-violin_PSE<- violin_bayes(PSE)[[1]]
+violin_PSE<- violin_bayes(PSE, HDI_range = c(0.055, 0.945))[[1]]
 violin_PSE +
-  labs(title="Prosocial simulation effect across experiments",x="Experiment", y = "Beta coefficient") +
-  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  labs(x="Experiment", y = "Logit")+
+  scale_x_discrete(labels=c( "Experiment 2", "Experiment 3", "Experiment 4"))+
+  scale_fill_manual(values=c(palette[1], palette[2], palette[3])) +
+  scale_color_manual(values = c(palette[1], palette[2], palette[3]))
 
 # Summaries
-violin_bayes(PSE, CI_range =  c(0.055, 0.945))[[2]]
+violin_bayes(PSE, HDI_range =  c(0.055, 0.945))[[2]]
 # pd
 p_direction(PSE.df)
 # % in ROPE
@@ -289,17 +297,23 @@ IPE_IPEG<-PSE$Posterior[PSE$Condition=="IPE"]-PSE$Posterior[PSE$Condition=="IPEG
 PSE_dif<- cbind.data.frame("IPE-IPEG"=IPE_IPEG,"IPEF-IPEG"=IPEF_IPEG)
 PSE_dif.df<-PSE_dif
 PSE_dif<- PSE_dif %>% gather("IPE-IPEG","IPEF-IPEG", key= Condition, value= Posterior)
-violin_dif<- violin_bayes(PSE_dif)[[1]]
+violin_dif<- violin_bayes(PSE_dif, HDI_range = c(0.055, 0.945))[[1]]
 violin_dif +
-  labs(title="Contrast of Prosocial simulation effect across experiments",x="Contrast", y = "Beta coefficient") +
-  stat_boxplot(geom = "errorbar", width = 0.1, coef=0.7)
+  labs(x="Experment Contrast", y = "Logit")+
+  scale_x_discrete(labels=c( "Experiment 2 > Experiment 4", "Experiment 3 > Experiment 4"))+
+  scale_fill_manual(values=c(palette[5], palette[6])) +
+  scale_color_manual(values = c(palette[5], palette[6]))
 
 # Summaries
-violin_bayes(PSE_dif, CI_range =  c(0.055, 0.945))[[2]]
+violin_bayes(PSE_dif, HDI_range =  c(0.055, 0.945))[[2]]
 # pd
 p_direction(PSE_dif.df)
 # % in ROPE
 rope(PSE_dif.df, ci=1, range=c(-0.1, 0.1))
+
+# OR 
+posterior_summary(exp(IPE_IPEG), probs=c(0.055, 0.945))
+posterior_summary(exp(IPEF_IPEG), probs=c(0.055, 0.945))
 ```
 
 
@@ -366,7 +380,7 @@ Gen_plot<-conditional_effects(Bayes_gen,categorical=T)
 plot(Gen_plot)[[1]] +
   scale_x_discrete(labels=c("Identify Media Source", "S-A-", "S-A+", "S+A-", "S+A+")) +
   theme_classic() +
-  xlab("Simulation Conditions") +
+  xlab("Conditions") +
   ylim (0, 0.45)
 #-------------------------------------------------------------------------------------------------------------
 # Contrasts between conditions
@@ -713,7 +727,7 @@ p_direction(IPEG_coh_IH, parameters = c("b_Coherence_C"))
 set.seed(67);posterior_coh_IPEG <- posterior_samples(IPEG_coh_IH)
 # OR
 posterior_summary(exp(posterior_coh_IPEG$`b_Coherence_C`), probs=c(0.055, 0.945))
-
+```
 
 #### Plots
 ```{r}
@@ -722,7 +736,7 @@ IPEG_vivid <- cbind.data.frame('Detail' = posterior_det_IPEG$b_Detail_C, "Cohere
 plot_vivid_IPEG <- IPEG_vivid %>% gather("Detail", "Coherence",  key = Condition, value = Posterior)
 violin_vivid_IPEG <- violin_bayes(plot_vivid_IPEG, HDI_range = c(0.055, 0.945))[[1]]
 violin_vivid_IPEG +
-  labs(x = "Vividness measures", y = "logit") +
+  labs(x = "Vividness measures", y = "Logit") +
   theme(legend.position='none') +
   ylim(-0.5, 1) +
   scale_fill_manual(values = c(palette[2], palette[3])) +
